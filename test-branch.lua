@@ -21,6 +21,7 @@ ProtectGui(ScreenGui);
 ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Global;
 ScreenGui.Parent = CoreGui;
 ScreenGui.DisplayOrder = 20;
+ScreenGui.IgnoreGuiInset = True;
 
 local Toggles = {};
 local Options = {};
@@ -50,6 +51,9 @@ local Library = {
 	NotificationStyle = {
 		Transparency = 0;
 		BarSide = "Left"; -- { "Left", "Right", "Bottom", "Top" };
+		Alignment = "Left"; -- { "Left", "Center", "Right" };
+		Y = 0.1;
+		X= 0;
 	};
 
 	KeypickerListVisible = true;
@@ -3200,10 +3204,16 @@ end;
 
 -- < Create other UI elements >
 do
+	local ns_init = Library.NotificationStyle or {};
+	local align_map = { Left = 0, Center = 0.5, Right = 1 };
+	local anchor_x = align_map[ns_init.Alignment] or 0;
+	local anchor_y = ((ns_init.Y or 0) < 0.5) and 0 or 1;
+
 	Library.NotificationAreaHolder = Library:Create('Frame', {
 		BackgroundTransparency = 1;
-		Position = UDim2.new(0, 0, 0, 39);
-		Size = UDim2.new(0, 2560, 0, 200);
+		AnchorPoint = Vector2.new(anchor_x, anchor_y);
+		Position = UDim2.new(ns_init.X or 0, 0, ns_init.Y or 0, 0);
+		Size = UDim2.new(0, 200, 0, 200);
 		ZIndex = 100;
 		Parent = ScreenGui;
 	});
@@ -3216,12 +3226,14 @@ do
 		Parent = Library.NotificationAreaHolder;
 	});
 
-	Library:Create('UIListLayout', {
+	local listLayout = Library:Create('UIListLayout', {
 		Padding = UDim.new(0, 4);
 		FillDirection = Enum.FillDirection.Vertical;
 		SortOrder = Enum.SortOrder.LayoutOrder;
 		Parent = Library.NotificationArea;
 	});
+	Library.NotificationListLayout = listLayout;
+	listLayout.VerticalAlignment = (anchor_y == 0) and Enum.VerticalAlignment.Top or Enum.VerticalAlignment.Bottom;
 
 	local WatermarkOuter = Library:Create('Frame', {
 		BorderColor3 = Color3.new(0, 0, 0);
@@ -3658,7 +3670,8 @@ function Library:Notify(Text, Time)
 
 	YSize = YSize + 7;
 
-	local transparency = NotificationStyle.Transparency;
+	local ns = Library.NotificationStyle or {};
+	local transparency = ns.Transparency or 0;
 	local main, accent, outline, font = get_notification_colors();
 
 	local NotifyOuter = notification_clone:Clone();
@@ -3687,21 +3700,43 @@ function Library:Notify(Text, Time)
 
 	local LeftColor = NotifyOuter.bar;
 	LeftColor.BackgroundColor3 = accent;
-	LeftColor.Size = NotifySettings.BarSize[NotificationStyle.BarSide] or udim2_new(0, 3, 1, 2);
-	LeftColor.Position = NotifySettings.BarPosition[NotificationStyle.BarSide];
+	local side = (ns.BarSide or "Left");
+	LeftColor.Size = NotifySettings.BarSize[side] or udim2_new(0, 3, 1, 2);
+	LeftColor.Position = NotifySettings.BarPosition[side];
 
-	NotifyOuter.Parent = Library.NotificationArea;
+	local align_map = { Left = 0, Center = 0.5, Right = 1 };
+	local anchor_x = align_map[ns.Alignment] or 0;
+	local anchor_y = ((ns.Y or 0) < 0.5) and 0 or 1;
+	Library.NotificationAreaHolder.AnchorPoint = Vector2.new(anchor_x, anchor_y);
+	Library.NotificationAreaHolder.Position = UDim2.new((ns.X or 0), 0, (ns.Y or 0), 0);
+	if Library.NotificationListLayout then
+	    Library.NotificationListLayout.VerticalAlignment = (anchor_y == 0) and Enum.VerticalAlignment.Top or Enum.VerticalAlignment.Bottom;
+	end
 
-	pcall(NotifyOuter.TweenSize, NotifyOuter, UDim2.new(0, XSize + 8 + 4, 0, YSize), 'Out', 'Quad', 0.4, true);
+	local wrapper = Library:Create('Frame', {
+		BackgroundTransparency = 1;
+		BorderSizePixel = 0;
+		Size = UDim2.new(1, 0, 0, YSize);
+		ZIndex = NotifyOuter.ZIndex;
+		Parent = Library.NotificationArea;
+	});
+
+	NotifyOuter.AnchorPoint = Vector2.new(anchor_x, 0);
+	NotifyOuter.Position = UDim2.new(anchor_x, 0, 0, 0);
+	NotifyOuter.Size = UDim2.new(0, 0, 0, YSize);
+	NotifyOuter.Parent = wrapper;
+
+	local targetSize = UDim2.new(0, XSize + 8 + 4, 0, YSize);
+	TweenService:Create(NotifyOuter, TweenInfo.new(0.4, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { Size = targetSize }):Play();
+
 	task.spawn(function()
-		wait(Time or 5);
+	    wait(Time or 5);
 
-		pcall(NotifyOuter.TweenSize, NotifyOuter, UDim2.new(0, 0, 0, YSize), 'Out', 'Quad', 0.4, true);
+	    TweenService:Create(NotifyOuter, TweenInfo.new(0.4, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { Size = UDim2.new(0, 0, 0, YSize) }):Play();
 
-		wait(0.4);
-
-		NotifyOuter:Destroy();
-	end);
+	    wait(0.4);
+	    wrapper:Destroy();
+	end)
 end;
 
 function Library:IsVisible()
@@ -3724,7 +3759,7 @@ function Library:CreateWindow(...)
 	if type(Config.Title) ~= 'string' then Config.Title = 'No title' end
 	if type(Config.TabPadding) ~= 'number' then Config.TabPadding = 0 end
 	if type(Config.MenuFadeTime) ~= 'number' then Config.MenuFadeTime = 0.2 end
-
+	
 	if typeof(Config.Position) ~= 'UDim2' then Config.Position = UDim2.fromOffset(175, 50) end
 	if typeof(Config.Size) ~= 'UDim2' then Config.Size = UDim2.fromOffset(550, 600) end
 
@@ -3776,11 +3811,26 @@ function Library:CreateWindow(...)
 		Parent = Inner;
 	});
 
-	local VersionLabel = Library:CreateLabel({
+	--local VersionLabel = Library:CreateLabel({
+	--	Position = UDim2.new(0, -8, 0, 0);
+	--	Size = UDim2.new(1, 0, 0, 25);
+	--	Text = Config.Version or '';
+	--	TextColor3 = Config.VersionColor;
+	--	RichText = true;
+	--	TextXAlignment = Enum.TextXAlignment.Right;
+	--	ZIndex = 1;
+	--	Parent = Inner;
+	--});
+
+	local VersionLabel = Library:Create('TextLabel', {
+		BackgroundTransparency = 1;
 		Position = UDim2.new(0, -8, 0, 0);
 		Size = UDim2.new(1, 0, 0, 25);
 		Text = Config.Version or '';
+		TextColor3 = Config.VersionColor or Library.FontColor;
 		RichText = true;
+		Font = Library.Font;
+		TextSize = 14;
 		TextXAlignment = Enum.TextXAlignment.Right;
 		ZIndex = 1;
 		Parent = Inner;
@@ -4333,13 +4383,12 @@ function Library:CreateWindow(...)
 		_UI_IS_VISIBLE = Toggled;
 		Library:FireEvent("VisibilityChanged", _UI_IS_VISIBLE);
 		ModalElement.Modal = Toggled;
-		
 		if Toggled then
 			-- A bit scuffed, but if we're going from not toggled -> toggled we want to show the frame immediately so that the fade is visible.
 			Outer.Visible = true;
 			local guiservice = game:GetService("GuiService");
 			task.spawn(function()
-				-- TODO: add cursor fade?
+				-- TODO: optimize cursor fade to be only 2 lines
 				local State = InputService.MouseIconEnabled;
 				--local Cursor = Drawing.new('Triangle');
 				--Cursor.Thickness = 1;
@@ -4355,13 +4404,19 @@ function Library:CreateWindow(...)
 				local Cursor = Instance.new("ImageLabel", ScreenGui);
 				Cursor.Image = "http://www.roblox.com/asset/?id=4292970642";
 				Cursor.BackgroundTransparency = 1;
+				Cursor.ImageTransparency = 1;
 				Cursor.ZIndex = 100;
 
 				local CursorOutline = Instance.new("ImageLabel", ScreenGui);
 				CursorOutline.Image = "http://www.roblox.com/asset/?id=4292970642";
 				CursorOutline.ImageColor3 = Color3.new();
 				CursorOutline.BackgroundTransparency = 1;
+				CursorOutline.ImageTransparency = 1;
 				CursorOutline.ZIndex = 99;
+
+				-- Ts for now
+				TweenService:Create(Cursor, TweenInfo.new(FadeTime, Enum.EasingStyle.Linear), { ImageTransparency = 0 }):Play();
+				TweenService:Create(CursorOutline, TweenInfo.new(FadeTime, Enum.EasingStyle.Linear), { ImageTransparency = 0 }):Play();
 
 				Cursor.Size, CursorOutline.Size = UDim2.fromOffset(17, 17),  UDim2.fromOffset(19, 19);
 				Cursor.Rotation, CursorOutline.Rotation = -45, -45;
@@ -4386,6 +4441,11 @@ function Library:CreateWindow(...)
 				end;
 
 				InputService.MouseIconEnabled = State;
+
+				TweenService:Create(Cursor, TweenInfo.new(FadeTime, Enum.EasingStyle.Linear), { ImageTransparency = 1 }):Play();
+				TweenService:Create(CursorOutline, TweenInfo.new(FadeTime, Enum.EasingStyle.Linear), { ImageTransparency = 1 }):Play();
+				
+				task.wait(FadeTime);
 
 				Cursor:Destroy();
 				CursorOutline:Destroy();

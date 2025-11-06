@@ -3,7 +3,7 @@
 
 local repo = 'https://raw.githubusercontent.com/violin-suzutsuki/LinoriaLib/main/'
 
-local Library = loadstring(game:HttpGet(repo .. 'Library.lua'))()
+local Library = loadstring(readfile('test-branch.lua'))()
 local ThemeManager = loadstring(game:HttpGet(repo .. 'addons/ThemeManager.lua'))()
 local SaveManager = loadstring(game:HttpGet(repo .. 'addons/SaveManager.lua'))()
 
@@ -14,6 +14,8 @@ local Window = Library:CreateWindow({
     -- but you do not need to define them unless you are changing them :)
 
     Title = 'Example menu',
+    Version = 'v1.0',
+    VersionColor = Color3.fromRGB(255, 0, 0),
     Center = true,
     AutoShow = true,
     TabPadding = 8,
@@ -98,6 +100,7 @@ Toggles.MyToggle:SetValue(false)
 local MyButton = LeftGroupBox:AddButton({
     Text = 'Button',
     Func = function()
+        Library:Notify('You clicked the main button!')
         print('You clicked a button!')
     end,
     DoubleClick = false,
@@ -178,6 +181,26 @@ end)
 
 -- This should print to the console: "MySlider was changed! New value: 3"
 Options.MySlider:SetValue(3)
+
+-- Example: add a sub-slider (slider inside a slider)
+-- You can call :AddSlider on a slider to create a horizontally-arranged child slider
+local ParentSlider = Options.MySlider
+local SubSlider = ParentSlider:AddSlider('MySubSlider', {
+    Text = 'Sub slider',
+    Default = 1,
+    Min = 0,
+    Max = 5,
+    Rounding = 0,
+    Compact = true,
+    Callback = function(Value)
+        print('[cb] MySubSlider was changed! New value:', Value)
+    end
+})
+
+-- React to changes on the sub-slider
+Options.MySubSlider:OnChanged(function()
+    print('MySubSlider changed to:', Options.MySubSlider.Value)
+end)
 
 -- Groupbox:AddInput
 -- Arguments: Idx, Info
@@ -415,6 +438,54 @@ end)
 
 -- UI Settings
 local MenuGroup = Tabs['UI Settings']:AddLeftGroupbox('Menu')
+
+MenuGroup:AddDropdown('NotificationBarPosition', {
+    Values = { 'Left', 'Top', 'Bottom', 'Right' },
+    Default = 1,
+
+    Text = 'Notification bar position',
+
+    Callback = function(Value)
+        Library.NotificationStyle.BarSide = Value
+    end
+})
+
+MenuGroup:AddDropdown('NotificationPosition', {
+    Values = { 'Left', 'Center', 'Right' },
+    Default = 1,
+
+    Text = 'Notification position',
+
+    Callback = function(Value)
+        Library.NotificationStyle.Alignment = Value
+    end
+})
+
+MenuGroup:AddSlider('NotificationX', {
+    Text = 'Notification X position',
+    Default = 0,
+    Min = 0,
+    Max = 100,
+    Rounding = 0,
+    Suffix = '',
+
+    Callback = function(Value)
+        Library.NotificationStyle.X = Value / 100
+    end
+})
+
+MenuGroup:AddSlider('NotificationY', {
+    Text = 'Notification Y position',
+    Default = 10,
+    Min = 0,
+    Max = 100,
+    Rounding = 0,
+    Suffix = '',
+
+    Callback = function(Value)
+        Library.NotificationStyle.Y = Value / 100
+    end
+})
 
 -- I set NoUI so it does not show up in the keybinds menu
 MenuGroup:AddButton('Unload', function() Library:Unload() end)
